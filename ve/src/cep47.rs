@@ -5,8 +5,8 @@ use crate::{
 };
 use alloc::{string::String, vec::Vec};
 use casper_types::{ApiError, Key, U256};
-use contract_utils::{ContractContext, ContractStorage};
 use core::convert::TryInto;
+use crate::utils;
 
 #[repr(u16)]
 pub enum Error {
@@ -22,7 +22,7 @@ impl From<Error> for ApiError {
     }
 }
 
-pub trait CEP47<Storage: ContractStorage>: ContractContext<Storage> {
+pub trait CEP47 {
     fn init(&mut self, name: String, symbol: String, meta: Meta) {
         data::set_name(name);
         data::set_symbol(symbol);
@@ -126,15 +126,8 @@ pub trait CEP47<Storage: ContractStorage>: ContractContext<Storage> {
         Ok(token_ids)
     }
 
-    fn mint_copies(
-        &mut self,
-        recipient: Key,
-        token_ids: Vec<TokenId>,
-        token_meta: Meta,
-        count: u32,
-    ) -> Result<Vec<TokenId>, Error> {
-        let token_metas = vec![token_meta; count.try_into().unwrap()];
-        self.mint(recipient, token_ids, token_metas)
+    fn get_caller(&self) -> Key {
+        utils::get_immediate_caller_key()
     }
 
     fn burn(&mut self, owner: Key, token_ids: Vec<TokenId>) -> Result<(), Error> {
@@ -276,7 +269,30 @@ pub trait CEP47<Storage: ContractStorage>: ContractContext<Storage> {
         false
     }
 
+    fn is_approved_or_owner(&self, token_id: TokenId, spender: Key) -> bool {
+        let owner = self.owner_of(token_id).unwrap();
+        if owner == spender {
+            return true
+        }
+        let allowances_dict = Allowances::instance();
+        if let Some(spender_of) = allowances_dict.get(&owner, &token_id) {
+            if spender_of == spender {
+                return true;
+            }
+        }
+        false
+    }
+
     fn emit(&mut self, event: CEP47Event) {
         data::emit(&event);
+    }
+}
+#[derive(Default)]
+pub struct NFTToken;
+
+impl CEP47 for NFTToken {}
+impl NFTToken {
+    pub fn constructor(&mut self, name: String, symbol: String, meta: Meta) {
+        CEP47::init(self, name, symbol, meta);
     }
 }

@@ -13,31 +13,17 @@ use casper_types::{
     runtime_args, CLType, CLTyped, CLValue, ContractPackageHash, EntryPoint, EntryPointAccess,
     EntryPointType, EntryPoints, Group, Key, Parameter, RuntimeArgs, URef, U256,
 };
-use cep47::{Meta, TokenId, CEP47};
-use contract_utils::{ContractContext, OnChainContractStorage};
-
-#[derive(Default)]
-struct NFTToken(OnChainContractStorage);
-
-impl ContractContext<OnChainContractStorage> for NFTToken {
-    fn storage(&self) -> &OnChainContractStorage {
-        &self.0
-    }
-}
-
-impl CEP47<OnChainContractStorage> for NFTToken {}
-impl NFTToken {
-    fn constructor(&mut self, name: String, symbol: String, meta: Meta) {
-        CEP47::init(self, name, symbol, meta);
-    }
-}
+use ve::{Meta, TokenId, CEP47, NFTToken, vedata::{self, TOKEN_CONTRACT_HASH, ART_PROXY_CONTRACT_HASH}};
 
 #[no_mangle]
 fn constructor() {
     let name = runtime::get_named_arg::<String>("name");
     let symbol = runtime::get_named_arg::<String>("symbol");
     let meta = runtime::get_named_arg::<Meta>("meta");
+    let token_contract: Key = runtime::get_named_arg(TOKEN_CONTRACT_HASH);
+    let art_proxy_contract: Key = runtime::get_named_arg(ART_PROXY_CONTRACT_HASH);
     NFTToken::default().constructor(name, symbol, meta);
+    vedata::initialize(token_contract, art_proxy_contract);
 }
 
 #[no_mangle]
@@ -103,36 +89,6 @@ fn update_token_meta() {
 }
 
 #[no_mangle]
-fn mint() {
-    let recipient = runtime::get_named_arg::<Key>("recipient");
-    let token_ids = runtime::get_named_arg::<Vec<TokenId>>("token_ids");
-    let token_metas = runtime::get_named_arg::<Vec<Meta>>("token_metas");
-    NFTToken::default()
-        .mint(recipient, token_ids, token_metas)
-        .unwrap_or_revert();
-}
-
-#[no_mangle]
-fn mint_copies() {
-    let recipient = runtime::get_named_arg::<Key>("recipient");
-    let token_ids = runtime::get_named_arg::<Vec<U256>>("token_ids");
-    let token_meta = runtime::get_named_arg::<Meta>("token_meta");
-    let count = runtime::get_named_arg::<u32>("count");
-    NFTToken::default()
-        .mint_copies(recipient, token_ids, token_meta, count)
-        .unwrap_or_revert();
-}
-
-#[no_mangle]
-fn burn() {
-    let owner = runtime::get_named_arg::<Key>("owner");
-    let token_ids = runtime::get_named_arg::<Vec<TokenId>>("token_ids");
-    NFTToken::default()
-        .burn(owner, token_ids)
-        .unwrap_or_revert();
-}
-
-#[no_mangle]
 fn transfer() {
     let recipient = runtime::get_named_arg::<Key>("recipient");
     let token_ids = runtime::get_named_arg::<Vec<TokenId>>("token_ids");
@@ -174,13 +130,18 @@ fn call() {
     let name: String = runtime::get_named_arg("name");
     let symbol: String = runtime::get_named_arg("symbol");
     let meta: Meta = runtime::get_named_arg("meta");
+    let token_contract: Key = runtime::get_named_arg(TOKEN_CONTRACT_HASH);
+    let art_proxy_contract: Key = runtime::get_named_arg(ART_PROXY_CONTRACT_HASH);
+
     let contract_name: String = runtime::get_named_arg("contract_name");
 
     // Prepare constructor args
     let constructor_args = runtime_args! {
         "name" => name,
         "symbol" => symbol,
-        "meta" => meta
+        "meta" => meta,
+        TOKEN_CONTRACT_HASH => token_contract,
+        ART_PROXY_CONTRACT_HASH => art_proxy_contract
     };
 
     let (contract_hash, _) = storage::new_contract(
@@ -293,39 +254,6 @@ fn get_entry_points() -> EntryPoints {
         EntryPointType::Contract,
     ));
     entry_points.add_entry_point(EntryPoint::new(
-        "mint",
-        vec![
-            Parameter::new("recipient", Key::cl_type()),
-            Parameter::new("token_ids", CLType::List(Box::new(TokenId::cl_type()))),
-            Parameter::new("token_metas", CLType::List(Box::new(Meta::cl_type()))),
-        ],
-        <()>::cl_type(),
-        EntryPointAccess::Public,
-        EntryPointType::Contract,
-    ));
-    entry_points.add_entry_point(EntryPoint::new(
-        "mint_copies",
-        vec![
-            Parameter::new("recipient", Key::cl_type()),
-            Parameter::new("token_ids", CLType::List(Box::new(TokenId::cl_type()))),
-            Parameter::new("token_meta", Meta::cl_type()),
-            Parameter::new("count", CLType::U32),
-        ],
-        <()>::cl_type(),
-        EntryPointAccess::Public,
-        EntryPointType::Contract,
-    ));
-    entry_points.add_entry_point(EntryPoint::new(
-        "burn",
-        vec![
-            Parameter::new("owner", Key::cl_type()),
-            Parameter::new("token_ids", CLType::List(Box::new(TokenId::cl_type()))),
-        ],
-        <()>::cl_type(),
-        EntryPointAccess::Public,
-        EntryPointType::Contract,
-    ));
-    entry_points.add_entry_point(EntryPoint::new(
         "transfer",
         vec![
             Parameter::new("recipient", Key::cl_type()),
@@ -376,5 +304,11 @@ fn get_entry_points() -> EntryPoints {
         EntryPointAccess::Public,
         EntryPointType::Contract,
     ));
+
+    let ve_entry_points = vedata::get_entry_points();
+    for e in &ve_entry_points.take_entry_points() {
+        entry_points.add_entry_point(e.clone());
+    }
+
     entry_points
 }

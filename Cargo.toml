@@ -1,8 +1,7 @@
 [workspace]
 
 members = [
-    "cep47",
-    "cep47-tests"
+    "ve",
 ]
 
 [profile.release]

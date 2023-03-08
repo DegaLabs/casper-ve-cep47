@@ -8,7 +8,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{system::CallStackElement, ContractPackageHash, Key, URef, U256};
-use contract_utils::{get_key, key_and_value_to_str, key_to_str, set_key, Dict};
+use crate::utils::{get_key, key_and_value_to_str, key_to_str, set_key};
+use crate::dict::Dict;
 
 use crate::{event::CEP47Event, Meta, TokenId};
 
