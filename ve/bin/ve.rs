@@ -9,6 +9,7 @@ use casper_contract::{
     contract_api::{runtime, storage},
     unwrap_or_revert::UnwrapOrRevert,
 };
+use crate::alloc::string::ToString;
 use casper_types::{
     runtime_args, CLType, CLTyped, CLValue, ContractPackageHash, EntryPoint, EntryPointAccess,
     EntryPointType, EntryPoints, Group, Key, Parameter, RuntimeArgs, URef, U256,
@@ -68,6 +69,8 @@ fn get_token_by_index() {
 #[no_mangle]
 fn owner_of() {
     let token_id = runtime::get_named_arg::<TokenId>("token_id");
+    runtime::print("get owner_of");
+    runtime::print(&token_id.as_u64().to_string());
     let ret = NFTToken::default().owner_of(token_id);
     runtime::ret(CLValue::from_t(ret).unwrap_or_revert());
 }
@@ -189,6 +192,8 @@ fn get_entry_points() -> EntryPoints {
             Parameter::new("name", String::cl_type()),
             Parameter::new("symbol", String::cl_type()),
             Parameter::new("meta", Meta::cl_type()),
+            Parameter::new(TOKEN_CONTRACT_HASH, Key::cl_type()),
+            Parameter::new(ART_PROXY_CONTRACT_HASH, Key::cl_type())
         ],
         <()>::cl_type(),
         EntryPointAccess::Groups(vec![Group::new("constructor")]),

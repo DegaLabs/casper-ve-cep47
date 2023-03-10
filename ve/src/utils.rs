@@ -83,7 +83,7 @@ pub fn require(v: bool, e: VeError) {
 
 pub fn is_null(k: Key) -> bool {
     let null_bytes: [u8; 32] = vec![0u8; 32].try_into().unwrap();
-    k.into_hash().unwrap() == null_bytes
+    k.to_bytes().unwrap() == null_bytes
 }
 
 pub fn null_key() -> Key {

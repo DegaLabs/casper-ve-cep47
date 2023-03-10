@@ -5,7 +5,7 @@ use crate::error::VeError;
 use crate::lock::{self, *};
 use crate::utils::{self, require};
 use crate::utils::{get_key, set_key};
-use crate::{erc20_helpers, CEP47, I128::*};
+use crate::{erc20_helpers, CEP47, I128::*, TokenId};
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
@@ -14,10 +14,12 @@ use alloc::{
 use casper_contract::{
     contract_api::{
         runtime::{self, get_blocktime},
+        runtime::print,
         storage,
     },
     unwrap_or_revert::UnwrapOrRevert,
 };
+use crate::cep47::Error;
 use casper_types::{
     bytesrepr::{self, FromBytes, ToBytes},
     CLType, CLTyped, CLValue, EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Key,
@@ -228,6 +230,7 @@ impl CLTyped for LockedBalance {
 }
 
 pub fn initialize(token_contract: Key, art_proxy_contract: Key) {
+    runtime::print("initialize");
     lock::init();
     let caller = utils::get_immediate_caller_key();
     set_key(TOKEN_CONTRACT_HASH, token_contract);
@@ -563,7 +566,7 @@ pub extern "C" fn deposit_for() {
 
 pub fn _create_lock(value: u128, lock_duration: u64, to: Key) -> u64 {
     let ts = current_block_timestamp_seconds();
-    let unlock_time = (ts + lock_duration) / ((WEEK * WEEK) as u64); // Locktime is rounded down to weeks
+    let unlock_time = (ts + lock_duration) / (WEEK as u64) * (WEEK as u64); // Locktime is rounded down to weeks
     require(value > 0, VeError::InvalidAmount);
     require(unlock_time > ts, VeError::CanOnlyLockTillTimeInFuture);
     require(
@@ -573,14 +576,16 @@ pub fn _create_lock(value: u128, lock_duration: u64, to: Key) -> u64 {
 
     let minted_tokens_count = data::total_supply().as_u64();
     let token_id = minted_tokens_count + 1;
+    runtime::print("minting token");
+    runtime::print(&token_id.to_string());
 
     NFTToken::default()
         .mint(
             to,
             vec![U256::from(token_id)],
             vec![BTreeMap::<String, String>::new()],
-        )
-        .unwrap_or_revert();
+        ).unwrap_or_revert();
+
     _move_token_delegates(utils::null_key(), _delegates(to), token_id);
 
     _deposit_for(
@@ -595,6 +600,7 @@ pub fn _create_lock(value: u128, lock_duration: u64, to: Key) -> u64 {
 
 #[no_mangle]
 pub extern "C" fn create_lock() {
+    runtime::print("here");
     let amount: U128 = runtime::get_named_arg(ARG_AMOUNT);
     let lock_duration: u64 = runtime::get_named_arg(ARG_LOCK_DURATION);
     when_not_locked();
@@ -664,7 +670,7 @@ pub extern "C" fn increase_unlock_time() {
 
     let ts = current_block_timestamp_seconds();
     let __locked = get_locked_balance(token_id);
-    let unlock_time = (ts + lock_duration) / ((WEEK * WEEK) as u64); // Locktime is rounded down to weeks
+    let unlock_time = (ts + lock_duration) / (WEEK as u64) * (WEEK as u64); // Locktime is rounded down to weeks
 
     require(__locked.end > ts, VeError::CannotAddToExpiredLock);
     require(__locked.amount > 0, VeError::NoExistingLock);
@@ -1023,19 +1029,21 @@ fn dao_voting_storage_init() {
 }
 
 fn get_delegate(a: Key) -> Key {
-    let k = hex::encode(a.into_hash().unwrap());
+    runtime::print("get_delegate reading dict");
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(DELEGATES);
+    runtime::print("get_delegate");
     dict.get(&k).unwrap_or(utils::null_key())
 }
 
 fn set_delegate(a: Key, d: Key) {
-    let k = hex::encode(a.into_hash().unwrap());
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(DELEGATES);
     dict.set(&k, d);
 }
 
 fn get_check_point_key(a: Key, index: u64) -> String {
-    let k = a.into_hash().unwrap();
+    let k = a.to_bytes().unwrap();
 
     let mut preimage = Vec::new();
     preimage.append(&mut k.to_vec());
@@ -1059,34 +1067,38 @@ fn set_check_point(a: Key, index: u64, cp: &Checkpoint) {
 }
 
 fn get_num_checkpoints(a: Key) -> u64 {
-    let k = hex::encode(a.into_hash().unwrap());
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(NUM_CHECKPOINTS);
     dict.get(&k).unwrap_or_default()
 }
 
 fn set_num_checkpoints(a: Key, n: u64) {
-    let k = hex::encode(a.into_hash().unwrap());
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(NUM_CHECKPOINTS);
     dict.set(&k, n);
 }
 
 fn get_nonces(a: Key) -> u64 {
-    let k = hex::encode(a.into_hash().unwrap());
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(NONCES);
     dict.get(&k).unwrap_or_default()
 }
 
 fn set_nonces(a: Key, n: u64) {
-    let k = hex::encode(a.into_hash().unwrap());
+    let k = utils::key_to_str(&a);
     let dict = Dict::instance(NONCES);
     dict.set(&k, n);
 }
 
 fn _delegates(delegator: Key) -> Key {
+    runtime::print("reading delegate");
     let current = get_delegate(delegator);
+    runtime::print("after reading delegate");
     if utils::is_null(current) {
+        runtime::print("is null");
         return delegator;
     }
+    runtime::print("is not null");
     current
 }
 
@@ -1184,6 +1196,7 @@ pub extern "C" fn get_past_total_supply() {
 //                             DAO VOTING LOGIC
 //////////////////////////////////////////////////////////////*/
 pub(crate) fn _move_token_delegates(src: Key, dst: Key, token_id: u64) {
+    runtime::print("hehre");
     if src != dst && token_id > 0 {
         if utils::is_not_null(src) {
             let src_rep_num = get_num_checkpoints(src);

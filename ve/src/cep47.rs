@@ -6,6 +6,7 @@ use crate::{
 use alloc::{string::String, vec::Vec};
 use casper_types::{ApiError, Key, U256};
 use core::convert::TryInto;
+use casper_contract::contract_api::runtime;
 use crate::utils;
 
 #[repr(u16)]

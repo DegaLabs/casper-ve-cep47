@@ -1,9 +1,0 @@
-[workspace]
-
-members = [
-    "ve",
-]
-
-[profile.release]
-codegen-units = 1
-lto = true
